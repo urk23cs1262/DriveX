@@ -17,19 +17,25 @@ jobs:
       - name: Configure Minikube Docker environment
         shell: powershell
         run: |
-          # Get minikube docker-env and set them in this step + export for subsequent steps
-          $envVars = minikube -p minikube docker-env --shell powershell | Out-String
-          Invoke-Expression $envVars
-
-          # Export the critical env vars for subsequent steps
-          $dockerHost = (minikube -p minikube docker-env --shell none | Select-String "DOCKER_HOST").ToString().Split("=")[1]
-          $dockerCertPath = (minikube -p minikube docker-env --shell none | Select-String "DOCKER_CERT_PATH").ToString().Split("=")[1]
-          $dockerTlsVerify = (minikube -p minikube docker-env --shell none | Select-String "DOCKER_TLS_VERIFY").ToString().Split("=")[1]
-
-          echo "DOCKER_HOST=$dockerHost" >> $env:GITHUB_ENV
-          echo "DOCKER_CERT_PATH=$dockerCertPath" >> $env:GITHUB_ENV
-          echo "DOCKER_TLS_VERIFY=$dockerTlsVerify" >> $env:GITHUB_ENV
-          echo "MINIKUBE_ACTIVE_DOCKERD=minikube" >> $env:GITHUB_ENV
+          # Parse minikube docker-env (plain KEY=VALUE format) and export to GITHUB_ENV
+          $lines = minikube -p minikube docker-env --shell none
+          foreach ($line in $lines) {
+            $line = $line.Trim()
+            # Skip empty lines and comments
+            if ($line -eq "" -or $line.StartsWith("#")) { continue }
+            # Parse KEY=VALUE
+            $eqIndex = $line.IndexOf("=")
+            if ($eqIndex -gt 0) {
+              $key = $line.Substring(0, $eqIndex)
+              $value = $line.Substring($eqIndex + 1)
+              # Set for current step
+              [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
+              # Export for subsequent steps
+              echo "$key=$value" >> $env:GITHUB_ENV
+            }
+          }
+          Write-Host "Docker environment configured for Minikube"
+          docker info --format '{{.Name}}'
 
       # ── 3. Build Docker images inside Minikube ─────────────────────────
       - name: Build server image
