@@ -1,7 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: server-deployment
+  name: server
+  namespace: drivex
+  labels:
+    app: server
 spec:
   replicas: 1
   selector:
@@ -13,31 +16,41 @@ spec:
         app: server
     spec:
       containers:
-      - name: server
-        image: drivex-server:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 5000
-        env:
-        - name: PORT
-          value: "5000"
-        - name: MONGO_URI
-          value: "mongodb://mongo-service:27017/drivex"
-        - name: NODE_ENV
-          value: "production"
-        - name: REPLICATION_FACTOR
-          value: "2"
-        - name: UPLOAD_DIR
-          value: "/app/storage"
+        - name: server
+          image: drivex-server:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
+          env:
+            - name: PORT
+              value: "5000"
+            - name: MONGO_URI
+              value: "mongodb://mongo-service:27017/drivex"
+            - name: NODE_ENV
+              value: "production"
+            - name: REPLICATION_FACTOR
+              value: "2"
+            - name: UPLOAD_DIR
+              value: "./storage"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: server-service
+  namespace: drivex
+  labels:
+    app: server
 spec:
   selector:
     app: server
   ports:
-    - protocol: TCP
-      port: 5000
+    - port: 5000
       targetPort: 5000
+  type: ClusterIP

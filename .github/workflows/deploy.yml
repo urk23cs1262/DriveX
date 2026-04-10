@@ -1,40 +1,84 @@
-name: CI/CD Pipeline to Minikube
+name: Build & Deploy to Minikube
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
+      # ── 1. Checkout code ──────────────────────────────────────────────────
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build and Load Client Image
+      # ── 2. Point Docker CLI to Minikube's Docker daemon ────────────────
+      - name: Configure Minikube Docker environment
+        shell: powershell
         run: |
-          docker build -t drivex-client:latest ./client
-          minikube image load drivex-client:latest
+          # Get minikube docker-env and set them in this step + export for subsequent steps
+          $envVars = minikube -p minikube docker-env --shell powershell | Out-String
+          Invoke-Expression $envVars
 
-      - name: Build and Load Server Image
-        run: |
-          docker build -t drivex-server:latest ./server
-          minikube image load drivex-server:latest
+          # Export the critical env vars for subsequent steps
+          $dockerHost = (minikube -p minikube docker-env --shell none | Select-String "DOCKER_HOST").ToString().Split("=")[1]
+          $dockerCertPath = (minikube -p minikube docker-env --shell none | Select-String "DOCKER_CERT_PATH").ToString().Split("=")[1]
+          $dockerTlsVerify = (minikube -p minikube docker-env --shell none | Select-String "DOCKER_TLS_VERIFY").ToString().Split("=")[1]
 
-      - name: Apply Kubernetes Manifests
+          echo "DOCKER_HOST=$dockerHost" >> $env:GITHUB_ENV
+          echo "DOCKER_CERT_PATH=$dockerCertPath" >> $env:GITHUB_ENV
+          echo "DOCKER_TLS_VERIFY=$dockerTlsVerify" >> $env:GITHUB_ENV
+          echo "MINIKUBE_ACTIVE_DOCKERD=minikube" >> $env:GITHUB_ENV
+
+      # ── 3. Build Docker images inside Minikube ─────────────────────────
+      - name: Build server image
+        shell: powershell
+        run: docker build -t drivex-server:latest ./server
+
+      - name: Build client image
+        shell: powershell
+        run: docker build -t drivex-client:latest ./client
+
+      # ── 4. Deploy to Minikube ──────────────────────────────────────────
+      - name: Apply Kubernetes manifests
+        shell: powershell
         run: |
+          kubectl apply -f k8s/namespace.yml
           kubectl apply -f k8s/mongo.yml
           kubectl apply -f k8s/server.yml
           kubectl apply -f k8s/client.yml
 
-      - name: Restart Deployments
+      # ── 5. Wait for MongoDB to be ready first ─────────────────────────
+      - name: Wait for MongoDB
+        shell: powershell
         run: |
-          kubectl rollout restart deployment client-deployment
-          kubectl rollout restart deployment server-deployment
+          kubectl rollout status deployment/mongo -n drivex --timeout=120s
 
-      - name: Check Status
+      # ── 6. Restart server & client to pick up fresh images ─────────────
+      - name: Rollout restart deployments
+        shell: powershell
         run: |
-          kubectl get pods
-          kubectl get svc
+          kubectl rollout restart deployment/server -n drivex
+          kubectl rollout restart deployment/client -n drivex
+
+      # ── 7. Wait for all deployments to be ready ────────────────────────
+      - name: Wait for deployments to be ready
+        shell: powershell
+        run: |
+          kubectl rollout status deployment/server -n drivex --timeout=120s
+          kubectl rollout status deployment/client -n drivex --timeout=120s
+
+      # ── 8. Show deployment status ─────────────────────────────────────
+      - name: Show deployment status
+        shell: powershell
+        run: |
+          Write-Host "============================================"
+          Write-Host "         DriveX Deployment Status"
+          Write-Host "============================================"
+          kubectl get all -n drivex
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "  Run 'minikube tunnel' to access the app"
+          Write-Host "  Then open: http://localhost"
+          Write-Host "============================================"

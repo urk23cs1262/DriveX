@@ -1,7 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: client-deployment
+  name: client
+  namespace: drivex
+  labels:
+    app: client
 spec:
   replicas: 1
   selector:
@@ -13,21 +16,30 @@ spec:
         app: client
     spec:
       containers:
-      - name: client
-        image: drivex-client:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 80
+        - name: client
+          image: drivex-client:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: client-service
+  namespace: drivex
+  labels:
+    app: client
 spec:
-  type: LoadBalancer
   selector:
     app: client
   ports:
-    - protocol: TCP
-      port: 80
+    - port: 80
       targetPort: 80
+  type: LoadBalancer
