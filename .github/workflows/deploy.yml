@@ -1,0 +1,40 @@
+name: CI/CD Pipeline to Minikube
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build and Load Client Image
+        run: |
+          docker build -t drivex-client:latest ./client
+          minikube image load drivex-client:latest
+
+      - name: Build and Load Server Image
+        run: |
+          docker build -t drivex-server:latest ./server
+          minikube image load drivex-server:latest
+
+      - name: Apply Kubernetes Manifests
+        run: |
+          kubectl apply -f k8s/mongo.yml
+          kubectl apply -f k8s/server.yml
+          kubectl apply -f k8s/client.yml
+
+      - name: Restart Deployments
+        run: |
+          kubectl rollout restart deployment client-deployment
+          kubectl rollout restart deployment server-deployment
+
+      - name: Check Status
+        run: |
+          kubectl get pods
+          kubectl get svc
