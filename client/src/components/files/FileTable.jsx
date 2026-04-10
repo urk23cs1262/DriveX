@@ -82,7 +82,8 @@ export default function FileTable() {
     };
 
     const copyLink = (token) => {
-        navigator.clipboard.writeText(`http://localhost:5000/api/shared/${token}`);
+        const baseURL = import.meta.env.VITE_API_URL || '/api';
+        navigator.clipboard.writeText(`${window.location.origin}${baseURL}/shared/${token}`);
         setCopiedToken(true);
         setTimeout(() => setCopiedToken(false), 2000);
     };
@@ -258,7 +259,7 @@ export default function FileTable() {
                             <div className="flex gap-2">
                                 <input
                                     readOnly
-                                    value={`http://localhost:5000/api/shared/${shareTarget?.shareToken}`}
+                                    value={`${window.location.origin}${import.meta.env.VITE_API_URL || '/api'}/shared/${shareTarget?.shareToken}`}
                                     className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono text-gray-600"
                                 />
                                 <button

@@ -55,7 +55,8 @@ export const useNodeStore = create((set, get) => ({
   initializeHealthStream: () => {
     if (typeof window === 'undefined') return;
 
-    const eventSource = new EventSource('http://localhost:5000/api/health-stream');
+    const baseURL = import.meta.env.VITE_API_URL || '/api';
+    const eventSource = new EventSource(`${baseURL}/health-stream`);
 
     eventSource.onmessage = (event) => {
       try {
